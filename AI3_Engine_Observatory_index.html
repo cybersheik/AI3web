@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>AI³ Lab — Engine Observatory</title>
+<style>
+  :root{
+    --bg:#0B0F14;
+    --panel:rgba(18,24,33,.78);
+    --border:rgba(255,255,255,.10);
+    --text:#E6EAF0;
+    --accent:#00F0FF;
+    --warn:#FF5C00;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+    --ui: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:#000;color:var(--text);font-family:var(--mono);overflow:hidden}
+  /* Video background */
+  #bg{position:fixed;inset:0;z-index:0;background:linear-gradient(180deg,#02060a,#000)}
+  #video{
+    position:absolute;inset:0;width:100%;height:100%;
+    object-fit:cover;opacity:.55;
+    filter: contrast(1.12) saturate(1.08);
+    transform: translateZ(0);
+  }
+  #bgfx{position:absolute;inset:0;width:100%;height:100%;opacity:.55;pointer-events:none}
+  /* Overlays */
+  .mesh{position:fixed;inset:0;z-index:1;pointer-events:none;
+    background-image:
+      radial-gradient(rgba(0,0,0,.78) 1px, transparent 1px),
+      radial-gradient(rgba(0,240,255,.08) 1px, transparent 1px);
+    background-size:4px 4px, 28px 28px;
+    mix-blend-mode: screen;
+  }
+  .vignette{position:fixed;inset:-12%;z-index:2;pointer-events:none;
+    background: radial-gradient(closest-side, rgba(0,0,0,0) 35%, rgba(0,0,0,.82) 100%);
+  }
+
+  /* Start gate */
+  #gate{
+    position:fixed;inset:0;z-index:5000;display:flex;align-items:center;justify-content:center;
+    background:#000;
+  }
+  #startBtn{
+    appearance:none; border:1px solid rgba(0,240,255,.55);
+    background:rgba(0,0,0,.45);
+    color:var(--accent);
+    padding:14px 18px;
+    border-radius:16px;
+    font-family:var(--mono);
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    cursor:pointer;
+    box-shadow:0 0 44px rgba(0,240,255,.10);
+    transition:.2s ease;
+    touch-action: manipulation;
+  }
+  #startBtn:active{transform:scale(.99)}
+  #startBtn:hover{box-shadow:0 0 72px rgba(0,240,255,.18)}
+  /* Observatory shell */
+  #shell{
+    position:fixed;inset:0;z-index:50;
+    display:flex;align-items:stretch;justify-content:center;
+    padding:18px;
+  }
+  .panel{
+    width:min(1200px, 100%);
+    height:100%;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:22px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    overflow:hidden;
+    box-shadow: 0 16px 70px rgba(0,0,0,.45);
+    position:relative;
+  }
+  #flow{
+    position:absolute;inset:0;width:100%;height:100%;display:block;
+  }
+  .hud{position:absolute;inset:0;padding:14px;display:flex;flex-direction:column;gap:10px;pointer-events:none}
+  .top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+  .title{
+    font-family:var(--ui);
+    font-weight:800;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    font-size:12px;
+    color:rgba(230,234,240,.92);
+  }
+  .sub{margin-top:6px;font-size:11px;color:rgba(230,234,240,.60);max-width:720px;line-height:1.35}
+  .kpis{
+    pointer-events:none;
+    display:grid;grid-template-columns:auto auto;gap:6px 12px;
+    padding:10px 12px;border-radius:16px;
+    border:1px solid rgba(0,240,255,.18);
+    background:rgba(0,0,0,.18);
+    font-size:11px;min-width:220px;
+  }
+  .kpis b{color:rgba(230,234,240,.92)}
+  .kpis span{color:rgba(230,234,240,.62)}
+  .bottom{
+    margin-top:auto;display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    pointer-events:auto;
+  }
+  .toggle{
+    display:flex;align-items:center;gap:8px;
+    padding:10px 12px;border-radius:16px;
+    border:1px solid rgba(255,255,255,.10);
+    background:rgba(0,0,0,.16);
+    color:rgba(230,234,240,.72);
+    font-size:11px;
+    cursor:pointer;user-select:none;
+    transition:.18s ease;
+    touch-action: manipulation;
+  }
+  .toggle:hover{border-color:rgba(0,240,255,.22);box-shadow:0 0 18px rgba(0,240,255,.06)}
+  .toggle.off{opacity:.45}
+  .dot{width:10px;height:10px;border-radius:999px;display:inline-block}
+  .d-engine{background:#4DA3FF;box-shadow:0 0 14px rgba(77,163,255,.35)}
+  .d-world{background:var(--warn);box-shadow:0 0 14px rgba(255,92,0,.25)}
+  .d-start{background:#65F0FF;box-shadow:0 0 14px rgba(101,240,255,.25)}
+  .status{
+    margin-left:auto;
+    padding:10px 12px;border-radius:16px;
+    border:1px solid rgba(255,255,255,.10);
+    background:rgba(0,0,0,.14);
+    font-size:11px;color:rgba(230,234,240,.62)
+  }
+  .status strong{color:rgba(230,234,240,.92)}
+  @media (max-width:640px){
+    #shell{padding:12px}
+    .sub{display:none}
+    .kpis{min-width:0;grid-template-columns:1fr 1fr}
+    .status{width:100%;margin-left:0}
+  }
+</style>
+</head>
+<body>
+  <div id="bg">
+    <video id="video" muted loop playsinline webkit-playsinline preload="auto">
+      <source src="./1769339405783.mp4" type="video/mp4">
+    </video>
+    <canvas id="bgfx"></canvas>
+  </div>
+  <div class="mesh"></div>
+  <div class="vignette"></div>
+
+  <div id="gate"><button id="startBtn">ENTER OBSERVATORY</button></div>
+
+  <div id="shell" aria-hidden="false">
+    <div class="panel">
+      <canvas id="flow"></canvas>
+      <div class="hud">
+        <div class="top">
+          <div>
+            <div class="title">ENGINE OBSERVATORY</div>
+            <div class="sub">Three live layers: Engine I/O, World pressure, Startup responses.</div>
+          </div>
+          <div class="kpis" aria-hidden="true">
+            <div><b>RUN</b></div><div><span id="kRun">#042</span></div>
+            <div><b>TIME</b></div><div><span id="kTime">T+ 00:00:00</span></div>
+            <div><b>WORLD</b></div><div><span id="kWorld">Pressure 0.62</span></div>
+            <div><b>STARTUP</b></div><div><span id="kStart">Health 0.71</span></div>
+          </div>
+        </div>
+        <div class="bottom">
+          <div class="toggle" id="tgEngine"><span class="dot d-engine"></span>ENGINE</div>
+          <div class="toggle" id="tgWorld"><span class="dot d-world"></span>WORLD</div>
+          <div class="toggle" id="tgStart"><span class="dot d-start"></span>STARTUP</div>
+          <div class="status" id="vstat">VIDEO: <strong>pending</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const gate = document.getElementById('gate');
+  const startBtn = document.getElementById('startBtn');
+  const video = document.getElementById('video');
+  const vstat = document.getElementById('vstat');
+
+  function setV(text){ vstat.innerHTML = 'VIDEO: <strong>' + text + '</strong>'; }
+
+  // Background fallback (always running)
+  const bgfx = document.getElementById('bgfx');
+  const bctx = bgfx.getContext('2d');
+  let bw=0,bh=0,bdpr=1,bt=0;
+  function resizeBg(){
+    bdpr = Math.min(devicePixelRatio||1, 2);
+    bw = bgfx.clientWidth; bh = bgfx.clientHeight;
+    bgfx.width = Math.floor(bw*bdpr);
+    bgfx.height = Math.floor(bh*bdpr);
+    bctx.setTransform(bdpr,0,0,bdpr,0,0);
+  }
+  function drawBg(){
+    bctx.fillStyle='rgba(5,10,16,0.20)';
+    bctx.fillRect(0,0,bw,bh);
+    const gx=(Math.sin(bt*0.002)*0.5+0.5)*bw;
+    const gy=(Math.cos(bt*0.0016)*0.5+0.5)*bh;
+    const g=bctx.createRadialGradient(gx,gy,10,gx,gy,Math.max(bw,bh)*0.9);
+    g.addColorStop(0,'rgba(0,240,255,0.10)');
+    g.addColorStop(1,'rgba(0,0,0,0)');
+    bctx.fillStyle=g; bctx.fillRect(0,0,bw,bh);
+    bctx.strokeStyle='rgba(0,240,255,0.08)'; bctx.lineWidth=1;
+    for(let i=0;i<6;i++){
+      const y=(bt*0.35+i*120)%(bh+160)-80;
+      bctx.beginPath(); bctx.moveTo(-40,y); bctx.lineTo(bw+40,y+60); bctx.stroke();
+    }
+    bt++; requestAnimationFrame(drawBg);
+  }
+
+  // Observatory canvas
+  const flow = document.getElementById('flow');
+  const ctx = flow.getContext('2d');
+  let w=0,h=0,dpr=1,frame=0,simSeconds=0,worldP=0.62,startH=0.71;
+
+  const kTime=document.getElementById('kTime');
+  const kWorld=document.getElementById('kWorld');
+  const kStart=document.getElementById('kStart');
+
+  function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
+  function rand(a,b){return a+Math.random()*(b-a);}
+  function lerp(a,b,t){return a+(b-a)*t;}
+  function fmtTime(s){
+    const hh=String(Math.floor(s/3600)).padStart(2,'0');
+    const mm=String(Math.floor((s%3600)/60)).padStart(2,'0');
+    const ss=String(s%60).padStart(2,'0');
+    return `T+ ${hh}:${mm}:${ss}`;
+  }
+  setInterval(()=>simSeconds++,1000);
+
+  function resizeFlow(){
+    dpr=Math.min(devicePixelRatio||1,2);
+    w=flow.clientWidth; h=flow.clientHeight;
+    flow.width=Math.floor(w*dpr); flow.height=Math.floor(h*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  // Toggles
+  let showEngine=true, showWorld=true, showStart=true;
+  const tgEngine=document.getElementById('tgEngine');
+  const tgWorld=document.getElementById('tgWorld');
+  const tgStart=document.getElementById('tgStart');
+
+  function bindToggle(el,get,set){
+    el.addEventListener('click',()=>{
+      const v=!get(); set(v);
+      el.classList.toggle('off',!v);
+    });
+  }
+  bindToggle(tgEngine,()=>showEngine,v=>showEngine=v);
+  bindToggle(tgWorld,()=>showWorld,v=>showWorld=v);
+  bindToggle(tgStart,()=>showStart,v=>showStart=v);
+
+  // Particles
+  const P=[]; const pulses=[];
+  function spawn(kind,x,y,vx,vy,life){ P.push({kind,x,y,vx,vy,life,max:life}); }
+
+  function draw(){
+    ctx.fillStyle='rgba(10,11,16,0.22)';
+    ctx.fillRect(0,0,w,h);
+
+    const cx=w*0.52, cy=h*0.52;
+    const Rcore=Math.min(w,h)*0.11;
+    const Rstart=Math.min(w,h)*0.27;
+    const Rworld=Math.min(w,h)*0.42;
+
+    // Subtle grid
+    ctx.save();
+    ctx.globalAlpha=0.16;
+    ctx.strokeStyle='rgba(255,255,255,0.06)';
+    ctx.lineWidth=1;
+    const step=44;
+    for(let x=(frame%step)-step;x<w;x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+    for(let y=((frame*0.6)%step)-step;y<h;y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+    ctx.restore();
+
+    // Engine buses (In left -> core, Out core -> right)
+    if(showEngine){
+      ctx.save();
+      ctx.shadowColor='rgba(0,240,255,0.25)'; ctx.shadowBlur=18;
+      ctx.strokeStyle='rgba(0,240,255,0.18)'; ctx.lineWidth=2;
+      for(let i=0;i<3;i++){
+        ctx.beginPath();
+        ctx.moveTo(16, cy+(i-1)*10);
+        ctx.lineTo(cx-Rcore-18, cy+(i-1)*10);
+        ctx.stroke();
+      }
+      ctx.strokeStyle='rgba(0,240,255,0.26)'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(cx+Rcore+18, cy); ctx.lineTo(w-16, cy); ctx.stroke();
+
+      // Out pulses
+      for(let i=0;i<6;i++){
+        const u=(frame*0.012+i*0.18)%1;
+        const x=lerp(cx+Rcore+18,w-24,u);
+        const glow=0.6+0.4*Math.sin(frame*0.04+i);
+        ctx.fillStyle=`rgba(0,240,255,${0.18+0.25*glow})`;
+        ctx.beginPath(); ctx.arc(x,cy,3.2,0,Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+
+      if(frame%5===0) spawn('engine',18,cy+rand(-10,10),rand(2.2,3.3),rand(-0.10,0.10),rand(80,120));
+    }
+
+    // World ring + pressure arc (orange)
+    if(showWorld){
+      ctx.save(); ctx.translate(cx,cy);
+      ctx.strokeStyle='rgba(255,255,255,0.14)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.arc(0,0,Rworld,0,Math.PI*2); ctx.stroke();
+
+      ctx.strokeStyle='rgba(255,92,0,0.24)'; ctx.lineWidth=3;
+      const a0=(frame*0.006)%(Math.PI*2);
+      ctx.beginPath(); ctx.arc(0,0,Rworld,a0,a0+0.9+worldP*0.6); ctx.stroke();
+      ctx.restore();
+
+      if(frame%12===0){
+        const ang=rand(0,Math.PI*2);
+        const sx=cx+Math.cos(ang)*Rworld;
+        const sy=cy+Math.sin(ang)*Rworld;
+        const tx=cx+Math.cos(ang)*Rstart;
+        const ty=cy+Math.sin(ang)*Rstart;
+        spawn('world',sx,sy,(tx-sx)/42+rand(-0.08,0.08),(ty-sy)/42+rand(-0.08,0.08),rand(70,110));
+      }
+    }
+
+    // Startup ring + responses
+    if(showStart){
+      ctx.save(); ctx.translate(cx,cy);
+      ctx.shadowColor='rgba(101,240,255,0.18)'; ctx.shadowBlur=12;
+      ctx.strokeStyle='rgba(101,240,255,0.22)'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(0,0,Rstart,0,Math.PI*2); ctx.stroke();
+      ctx.strokeStyle='rgba(101,240,255,0.10)'; ctx.lineWidth=1;
+      for(let i=0;i<4;i++){
+        const a=i*Math.PI/2+frame*0.0007;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a)*Rstart*0.70,Math.sin(a)*Rstart*0.70);
+        ctx.lineTo(Math.cos(a)*Rstart*1.05,Math.sin(a)*Rstart*1.05);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Response paths outward
+      for(let i=0;i<4;i++){
+        const phase=(frame*0.007+i*0.25)%1;
+        const a=i*Math.PI/2+0.4*Math.sin(frame*0.004+i);
+        const x0=cx+Math.cos(a)*Rstart;
+        const y0=cy+Math.sin(a)*Rstart;
+        const x3=cx+Math.cos(a)*Rworld*0.92;
+        const y3=cy+Math.sin(a)*Rworld*0.92;
+
+        const x1=lerp(x0,cx,0.15)+rand(-10,10);
+        const y1=lerp(y0,cy,0.15)+rand(-10,10);
+        const x2=lerp(x3,cx,0.15)+rand(-10,10);
+        const y2=lerp(y3,cy,0.15)+rand(-10,10);
+
+        ctx.strokeStyle='rgba(101,240,255,0.10)'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(x0,y0); ctx.bezierCurveTo(x1,y1,x2,y2,x3,y3); ctx.stroke();
+
+        const t=phase,u=1-t;
+        const px=(u*u*u)*x0+3*(u*u)*t*x1+3*u*(t*t)*x2+(t*t*t)*x3;
+        const py=(u*u*u)*y0+3*(u*u)*t*y1+3*u*(t*t)*y2+(t*t*t)*y3;
+        ctx.fillStyle='rgba(101,240,255,0.36)';
+        ctx.beginPath(); ctx.arc(px,py,2.6,0,Math.PI*2); ctx.fill();
+      }
+
+      if(frame%9===0){
+        const a=rand(0,Math.PI*2);
+        spawn('startup',cx+Math.cos(a)*Rstart,cy+Math.sin(a)*Rstart,Math.cos(a)*rand(0.6,1.2),Math.sin(a)*rand(0.6,1.2),rand(60,90));
+      }
+    }
+
+    // Core (hex + glow) + conflict pulses when world pressure high
+    if(showEngine){
+      ctx.save(); ctx.translate(cx,cy);
+      const pulse=1+0.06*Math.sin(frame*0.05);
+      const r=Rcore*pulse;
+      ctx.shadowColor = worldP>0.72 ? 'rgba(255,92,0,0.28)' : 'rgba(0,240,255,0.30)';
+      ctx.shadowBlur = 22;
+      ctx.strokeStyle = worldP>0.72 ? 'rgba(255,92,0,0.34)' : 'rgba(0,240,255,0.32)';
+      ctx.lineWidth=2;
+
+      ctx.beginPath();
+      for(let i=0;i<6;i++){
+        const a=i*Math.PI/3+frame*0.002;
+        const x=Math.cos(a)*r, y=Math.sin(a)*r;
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.closePath(); ctx.stroke();
+
+      const g=ctx.createRadialGradient(0,0,2,0,0,r*1.2);
+      g.addColorStop(0, worldP>0.72 ? 'rgba(255,92,0,0.18)' : 'rgba(0,240,255,0.20)');
+      g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.arc(0,0,r*1.25,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+
+    // Update particles
+    for(let i=P.length-1;i>=0;i--){
+      const p=P[i];
+      p.x+=p.vx; p.y+=p.vy; p.life--;
+      const a=clamp(p.life/p.max,0,1);
+
+      if(p.kind==='world'){
+        const dx=(cx-p.x), dy=(cy-p.y);
+        const inv=1/Math.max(90,Math.hypot(dx,dy));
+        p.vx+=dx*inv*0.03; p.vy+=dy*inv*0.03;
+      }else{
+        p.vx*=0.992; p.vy*=0.992;
+      }
+
+      let col='rgba(230,234,240,0.25)';
+      if(p.kind==='engine') col=`rgba(0,240,255,${0.14+0.24*a})`;
+      if(p.kind==='world')  col=`rgba(255,92,0,${0.18+0.46*a})`;
+      if(p.kind==='startup')col=`rgba(101,240,255,${0.14+0.30*a})`;
+
+      ctx.fillStyle=col;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.kind==='world'?3.0:2.4,0,Math.PI*2); ctx.fill();
+
+      const dist=Math.hypot(p.x-cx,p.y-cy);
+      if(p.kind==='world' && dist < Rstart*1.05 && frame%10===0){
+        pulses.push({x:p.x,y:p.y,r:2,life:0,max:28});
+      }
+
+      if(p.life<=0 || p.x<-80||p.x>w+80||p.y<-80||p.y>h+80) P.splice(i,1);
+    }
+
+    // Pulses (conflict shock)
+    for(let i=pulses.length-1;i>=0;i--){
+      const q=pulses[i]; q.life++; q.r+=2.2;
+      const a=1-q.life/q.max;
+      ctx.strokeStyle=`rgba(255,92,0,${(0.10+0.22*a).toFixed(3)})`;
+      ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(q.x,q.y,q.r,0,Math.PI*2); ctx.stroke();
+      if(q.life>=q.max) pulses.splice(i,1);
+    }
+
+    // KPI drift
+    if(frame%20===0){
+      worldP=clamp(worldP+rand(-0.03,0.03),0.05,0.95);
+      startH=clamp(startH+rand(-0.02,0.025)-(worldP-0.55)*0.02,0.05,0.98);
+      kTime.textContent=fmtTime(simSeconds);
+      kWorld.textContent=`Pressure ${worldP.toFixed(2)}`;
+      kStart.textContent=`Health ${startH.toFixed(2)}`;
+    }
+
+    frame++;
+    requestAnimationFrame(draw);
+  }
+
+  async function tryPlayVideo(){
+    try{
+      video.muted=true; video.volume=0;
+      video.setAttribute('playsinline','');
+      video.setAttribute('webkit-playsinline','');
+      video.preload='auto';
+      video.load();
+      await video.play();
+      setV('playing');
+    }catch(e){
+      setV('fallback');
+    }
+  }
+
+  function resizeAll(){
+    resizeBg(); resizeFlow();
+  }
+  window.addEventListener('resize', resizeAll);
+
+  startBtn.addEventListener('click', async ()=>{
+    gate.style.display='none';
+    resizeAll();
+    drawBg();
+    draw();
+    setV('pending');
+    await tryPlayVideo();
+  });
+
+  // Ensure canvases have size even before click (some browsers)
+  resizeAll();
+</script>
+</body>
+</html>

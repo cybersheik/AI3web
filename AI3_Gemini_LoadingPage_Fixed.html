@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>AI³ VIRTUAL OFFICE | INDUSTRIAL FUSION (Gemini Fix)</title>
+  <style>
+    :root{
+      --bronze:#c5a059;
+      --bronze-dim:#5c4d2e;
+      --dark-metal:#0a0b10;
+      --plasma:#00f0ff;
+      --glass:rgba(10,11,16,.82);
+      --border:rgba(255,255,255,.10);
+      --text:#e6eaf0;
+      --muted:rgba(230,234,240,.62);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+      --ui: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{height:100%;background:#000;color:var(--text);font-family:var(--mono);overflow:hidden}
+    a{color:inherit;text-decoration:none}
+
+    /* ===== Background (video + always-on canvas fallback) ===== */
+    #bg-layer{position:fixed;inset:0;z-index:0;background:#050a10;}
+    #main-video{
+      position:absolute;inset:0;width:100%;height:100%;
+      object-fit:cover;opacity:.58;
+      filter: sepia(20%) contrast(1.12) saturate(1.08);
+      transform:translateZ(0);
+    }
+    #bgfx{position:absolute;inset:0;width:100%;height:100%;opacity:.60;pointer-events:none}
+    .mesh-overlay{
+      position:fixed;inset:0;z-index:1;pointer-events:none;
+      background-image:
+        radial-gradient(rgba(0,0,0,.78) 1px, transparent 1px),
+        radial-gradient(rgba(0,240,255,.08) 1px, transparent 1px);
+      background-size:4px 4px, 28px 28px;
+      mix-blend-mode: screen;
+    }
+    .vignette{
+      position:fixed;inset:-12%;z-index:2;pointer-events:none;
+      background: radial-gradient(closest-side, rgba(0,0,0,0) 35%, rgba(0,0,0,.82) 100%);
+    }
+
+    /* ===== Gate (no “where to tap” explanations) ===== */
+    #gate{
+      position:fixed;inset:0;z-index:9000;
+      display:flex;align-items:center;justify-content:center;
+      background:#000;
+      padding:18px;
+    }
+    .gate-card{
+      width:min(680px,100%);
+      border:1px solid rgba(0,240,255,.28);
+      background:rgba(0,0,0,.55);
+      border-radius:18px;
+      padding:16px 16px;
+      box-shadow:0 0 52px rgba(0,240,255,.08);
+      display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    }
+    .gate-title{
+      font-family:var(--ui);
+      font-weight:800;
+      letter-spacing:.20em;
+      text-transform:uppercase;
+      font-size:12px;
+      color:rgba(230,234,240,.90);
+    }
+    .gate-btn{
+      appearance:none;
+      border:2px solid var(--plasma);
+      background:transparent;
+      color:var(--plasma);
+      padding:12px 16px;
+      border-radius:14px;
+      font-family:var(--mono);
+      letter-spacing:.20em;
+      text-transform:uppercase;
+      cursor:pointer;
+      box-shadow:0 0 26px rgba(0,240,255,.14);
+      transition:.22s ease;
+      touch-action:manipulation;
+    }
+    .gate-btn:hover{background:var(--plasma);color:#000;box-shadow:0 0 60px rgba(0,240,255,.28)}
+    .gate-btn:active{transform:translateY(1px)}
+
+    /* ===== Loader (bigger, cleaner) ===== */
+    #loader{
+      position:fixed;inset:0;z-index:8000;
+      display:none;
+      background:#000;
+      align-items:center;justify-content:center;
+      padding:18px;
+    }
+    .loader-wrap{
+      width:min(720px,100%);
+      display:flex;flex-direction:column;align-items:center;gap:18px;
+    }
+    .turbine{
+      position:relative;width:220px;height:220px;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .ring{
+      position:absolute;inset:0;border-radius:50%;
+      border:3px dashed rgba(197,160,89,.35);
+      animation:spin 10s linear infinite;
+    }
+    .gear{
+      position:absolute;inset:18px;border-radius:50%;
+      border:7px solid rgba(197,160,89,.85);
+      border-top-color:transparent;
+      animation:spinRev 2.8s linear infinite;
+      box-shadow:0 0 30px rgba(197,160,89,.18);
+    }
+    .core{
+      width:44px;height:44px;border-radius:999px;
+      background:rgba(0,240,255,.9);
+      box-shadow:0 0 70px rgba(0,240,255,.35);
+      transform:scale(0.8);
+      transition:transform .25s ease;
+    }
+    .loadline{
+      font-family:var(--ui);
+      letter-spacing:.22em;
+      text-transform:uppercase;
+      font-size:12px;
+      color:rgba(230,234,240,.72);
+    }
+    .progress{
+      width:min(520px,100%);
+      height:10px;border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(255,255,255,.06);
+      overflow:hidden;
+    }
+    .bar{
+      height:100%;width:0%;
+      background:linear-gradient(90deg, rgba(0,240,255,.15), rgba(0,240,255,.9));
+      box-shadow:0 0 22px rgba(0,240,255,.16);
+      transition:width .12s linear;
+    }
+    .enter{
+      appearance:none;
+      border:1px solid rgba(197,160,89,.55);
+      background:rgba(10,11,16,.70);
+      color:var(--bronze);
+      padding:12px 18px;
+      border-radius:14px;
+      font-family:var(--ui);
+      font-weight:700;
+      letter-spacing:.16em;
+      text-transform:uppercase;
+      cursor:pointer;
+      opacity:0.0;
+      pointer-events:none;
+      transition:.25s ease;
+    }
+    .enter.ready{opacity:1;pointer-events:auto}
+    .enter:hover{background:rgba(197,160,89,.92);color:#000;box-shadow:0 0 36px rgba(197,160,89,.18)}
+    .enter:active{transform:translateY(1px)}
+
+    /* ===== Workspace ===== */
+    #workspace{
+      position:fixed;inset:0;z-index:200;
+      display:none;
+      padding:14px;
+    }
+    .shell{
+      position:absolute;inset:14px;
+      display:grid;
+      grid-template-columns: 320px 1fr;
+      gap:14px;
+    }
+    .glass{
+      background:var(--glass);
+      border:1px solid rgba(255,255,255,.10);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius:18px;
+      box-shadow:0 16px 70px rgba(0,0,0,.45);
+      overflow:hidden;
+    }
+    .sidebar{
+      padding:12px;
+      display:flex;flex-direction:column;gap:10px;
+    }
+    .brand{
+      border:1px solid rgba(197,160,89,.18);
+      border-radius:14px;
+      padding:12px;
+      background:rgba(0,0,0,.16);
+      text-align:center;
+    }
+    .brand b{
+      display:block;font-family:var(--ui);
+      letter-spacing:.12em;color:var(--bronze);font-size:18px;
+    }
+    .brand span{
+      display:block;margin-top:6px;
+      font-size:11px;letter-spacing:.28em;text-transform:uppercase;
+      color:var(--plasma);
+    }
+    .nav{display:flex;flex-direction:column;gap:8px;padding:4px}
+    .nav-item{
+      border-radius:14px;
+      border:1px solid rgba(197,160,89,.12);
+      background:rgba(0,0,0,.14);
+      padding:12px 12px;
+      color:rgba(230,234,240,.72);
+      display:flex;align-items:center;justify-content:space-between;
+      cursor:pointer;user-select:none;
+      transition:.18s ease;
+      touch-action:manipulation;
+    }
+    .nav-item:hover{border-color:rgba(0,240,255,.22);box-shadow:0 0 18px rgba(0,240,255,.06);transform:translateX(2px)}
+    .nav-item.active{border-color:rgba(0,240,255,.28);color:rgba(230,234,240,.92)}
+    .nav-item.active::after{content:"►";color:var(--plasma)}
+    .sidebar-foot{
+      margin-top:auto;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(197,160,89,.12);
+      background:rgba(0,0,0,.14);
+      font-size:11px;
+      color:rgba(230,234,240,.58);
+      line-height:1.35;
+    }
+    .sidebar-foot strong{color:rgba(230,234,240,.92)}
+    .main{
+      position:relative;
+      padding:0;
+    }
+    .topbar{
+      position:absolute;left:0;right:0;top:0;z-index:5;
+      padding:12px 14px;
+      border-bottom:1px solid rgba(197,160,89,.12);
+      background:rgba(0,0,0,.18);
+      display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+    }
+    .title{
+      font-family:var(--ui);
+      font-weight:850;
+      letter-spacing:.20em;
+      text-transform:uppercase;
+      font-size:12px;
+      color:rgba(230,234,240,.92);
+    }
+    .subtitle{
+      margin-top:6px;
+      font-size:11px;
+      color:rgba(230,234,240,.60);
+      max-width:720px;
+      line-height:1.35;
+    }
+    .kpis{
+      display:grid;
+      grid-template-columns:auto auto;
+      gap:6px 12px;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(0,240,255,.18);
+      background:rgba(0,0,0,.18);
+      box-shadow:0 0 26px rgba(0,240,255,.06);
+      min-width:240px;
+      font-size:11px;
+    }
+    .kpis b{color:rgba(230,234,240,.92);font-weight:850}
+    .kpis span{color:rgba(230,234,240,.62)}
+    .content{
+      position:absolute;inset:0;
+      padding-top:68px;
+      overflow:hidden;
+    }
+    .pane{
+      position:absolute;inset:68px 0 0 0;
+      padding:18px;
+      overflow:auto;
+      display:none;
+    }
+    .pane.active{display:block}
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap:14px;
+    }
+    .card{
+      border-radius:16px;
+      border:1px solid rgba(197,160,89,.14);
+      background:rgba(0,0,0,.18);
+      padding:14px;
+      transition:.18s ease;
+      cursor:pointer;
+      user-select:none;
+      touch-action:manipulation;
+    }
+    .card:hover{border-color:rgba(0,240,255,.22);box-shadow:0 10px 30px rgba(0,240,255,.06);transform:translateY(-2px)}
+    .thumb{
+      height:150px;border-radius:14px;
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(0,0,0,.25);
+      display:flex;align-items:center;justify-content:center;
+      margin-bottom:12px;
+      overflow:hidden;
+    }
+    .thumb img{width:78%;height:78%;object-fit:contain;filter: drop-shadow(0 0 10px rgba(0,240,255,.25));}
+    .h3{font-family:var(--ui);font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-size:12px;color:rgba(230,234,240,.92)}
+    .p{margin-top:8px;font-size:11px;color:rgba(230,234,240,.62);line-height:1.35}
+
+    /* Mobile */
+    @media (max-width:980px){
+      #workspace{padding:10px}
+      .shell{inset:10px;grid-template-columns:1fr;grid-template-rows:auto 1fr}
+    }
+    @media (max-width:560px){
+      .kpis{min-width:0;grid-template-columns:1fr 1fr}
+      .subtitle{display:none}
+      .thumb{height:130px}
+    }
+
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes spinRev{to{transform:rotate(-360deg)}}
+  </style>
+</head>
+<body>
+
+  <div id="bg-layer">
+    <video id="main-video" muted loop playsinline webkit-playsinline preload="auto">
+      <source src="./1769339405783.mp4" type="video/mp4">
+    </video>
+    <canvas id="bgfx"></canvas>
+  </div>
+  <div class="mesh-overlay"></div>
+  <div class="vignette"></div>
+
+  <div id="gate">
+    <div class="gate-card">
+      <div class="gate-title">AI³ Lab — Virtual Office</div>
+      <button class="gate-btn" id="gate-btn">Enter</button>
+    </div>
+  </div>
+
+  <div id="loader">
+    <div class="loader-wrap">
+      <div class="turbine" aria-hidden="true">
+        <div class="ring"></div>
+        <div class="gear"></div>
+        <div class="core" id="core"></div>
+      </div>
+      <div class="loadline" id="loadline">INITIALIZING… 0%</div>
+      <div class="progress"><div class="bar" id="bar"></div></div>
+      <button class="enter" id="enter">Open</button>
+    </div>
+  </div>
+
+  <div id="workspace">
+    <div class="shell">
+      <aside class="glass sidebar">
+        <div class="brand">
+          <b>AI³ LAB</b>
+          <span>Industrial Fusion</span>
+        </div>
+
+        <div class="nav" id="nav">
+          <div class="nav-item active" data-tab="integration">INTEGRATION HUB</div>
+          <div class="nav-item" data-tab="vault">DATA VAULT</div>
+          <div class="nav-item" data-tab="agents">AGENT SWARM</div>
+          <div class="nav-item" data-tab="knowledge">KNOWLEDGE CORE</div>
+          <div class="nav-item" data-tab="simulation">SIMULATION DECK</div>
+        </div>
+
+        <div class="sidebar-foot">
+          <div>VIDEO: <strong id="vstate">pending</strong></div>
+          <div>CORE: <strong>v1.5</strong> · ENGINE: <strong>ACTIVE</strong></div>
+          <div>RUN: <strong id="run">#042</strong> · <span id="time">T+ 00:00:00</span></div>
+        </div>
+      </aside>
+
+      <main class="glass main">
+        <div class="topbar">
+          <div>
+            <div class="title" id="head">INTEGRATION HUB</div>
+            <div class="subtitle" id="sub">External connections & utilities. Cards can open links (set data-href).</div>
+          </div>
+          <div class="kpis" aria-hidden="true">
+            <div><b>RUN</b></div><div><span id="kRun">#042</span></div>
+            <div><b>TIME</b></div><div><span id="kTime">T+ 00:00:00</span></div>
+            <div><b>VIDEO</b></div><div><span id="kV">pending</span></div>
+            <div><b>STATUS</b></div><div><span>connected</span></div>
+          </div>
+        </div>
+
+        <div class="content">
+          <section class="pane active" id="tab-integration">
+            <div class="grid">
+              <div class="card" data-href="https://discord.com/">
+                <div class="thumb"><img src="./cube1.png" alt="cube" onerror="this.replaceWith(window.__cubeSvg())"></div>
+                <div class="h3">DISCORD UPLINK</div>
+                <div class="p">Community & team channel. Click to open (replace link later).</div>
+              </div>
+              <div class="card" data-href="https://www.atlassian.com/software/jira">
+                <div class="thumb"><img src="./cube2.png" alt="cube" onerror="this.replaceWith(window.__cubeSvg())"></div>
+                <div class="h3">JIRA SYNC</div>
+                <div class="p">Task protocol. Replace with your board URL.</div>
+              </div>
+              <div class="card" data-href="https://multiple.chat/">
+                <div class="thumb"><img src="./cube3.png" alt="cube" onerror="this.replaceWith(window.__cubeSvg())"></div>
+                <div class="h3">MULTIPLE.CHAT</div>
+                <div class="p">Multi-agent control center. Replace with your workspace URL.</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="pane" id="tab-vault">
+            <div class="grid">
+              <div class="card" style="cursor:default">
+                <div class="thumb"><img src="./cube4.png" alt="cube" onerror="this.replaceWith(window.__cubeSvg())"></div>
+                <div class="h3">SECURE STORAGE</div>
+                <div class="p">Placeholder. Wire it to Drive/Notion/Git later.</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="pane" id="tab-agents">
+            <div class="grid">
+              <div class="card" style="cursor:default">
+                <div class="h3">AGENT SWARM</div>
+                <div class="p">List roles: Architect / Analyst / Critic / Simulator. Add controls later.</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="pane" id="tab-knowledge">
+            <div class="grid">
+              <div class="card" style="cursor:default">
+                <div class="h3">KNOWLEDGE CORE</div>
+                <div class="p">Drop MANIFESTO / ARCHITECTURE / WORKFLOW here or link to docs.</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="pane" id="tab-simulation">
+            <div class="grid">
+              <div class="card" style="cursor:default">
+                <div class="h3">SIMULATION DECK</div>
+                <div class="p">Link to Engine Observatory (your other page) or embed later.</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+<script>
+  // ===== inline fallback cube (no extra files required for thumbnails) =====
+  window.__cubeSvg = function(){
+    const ns='http://www.w3.org/2000/svg';
+    const svg=document.createElementNS(ns,'svg');
+    svg.setAttribute('viewBox','0 0 120 120');
+    svg.setAttribute('width','78%');
+    svg.setAttribute('height','78%');
+    const g=document.createElementNS(ns,'g');
+    g.setAttribute('fill','none');
+    g.setAttribute('stroke','rgba(0,240,255,.55)');
+    g.setAttribute('stroke-width','2');
+    const p=document.createElementNS(ns,'path');
+    p.setAttribute('d','M60 12 102 36v48L60 108 18 84V36z M60 12v48l42 24 M60 60 18 36');
+    g.appendChild(p);
+    const glow=document.createElementNS(ns,'circle');
+    glow.setAttribute('cx','60'); glow.setAttribute('cy','60'); glow.setAttribute('r','42');
+    glow.setAttribute('stroke','rgba(0,240,255,.18)');
+    glow.setAttribute('stroke-width','8');
+    svg.appendChild(glow); svg.appendChild(g);
+    return svg;
+  };
+
+  // ===== Elements =====
+  const gate = document.getElementById('gate');
+  const gateBtn = document.getElementById('gate-btn');
+  const loader = document.getElementById('loader');
+  const loadline = document.getElementById('loadline');
+  const bar = document.getElementById('bar');
+  const enter = document.getElementById('enter');
+  const workspace = document.getElementById('workspace');
+
+  const video = document.getElementById('main-video');
+  const vstate = document.getElementById('vstate');
+  const kV = document.getElementById('kV');
+
+  const head = document.getElementById('head');
+  const sub = document.getElementById('sub');
+
+  const runEl = document.getElementById('run');
+  const timeEl = document.getElementById('time');
+  const kTime = document.getElementById('kTime');
+
+  // ===== Time =====
+  let sec=0;
+  function fmtTime(s){
+    const hh=String(Math.floor(s/3600)).padStart(2,'0');
+    const mm=String(Math.floor((s%3600)/60)).padStart(2,'0');
+    const ss=String(s%60).padStart(2,'0');
+    return `T+ ${hh}:${mm}:${ss}`;
+  }
+  setInterval(()=>{
+    sec++;
+    const t=fmtTime(sec);
+    timeEl.textContent=t;
+    kTime.textContent=t;
+  },1000);
+
+  // ===== Always-on background canvas (runs even if video fails) =====
+  const bgfx = document.getElementById('bgfx');
+  const bctx = bgfx.getContext('2d');
+  let bw=0,bh=0,bdpr=1,bt=0;
+  function resizeBg(){
+    bdpr = Math.min(window.devicePixelRatio||1,2);
+    bw = bgfx.clientWidth; bh = bgfx.clientHeight;
+    bgfx.width = Math.floor(bw*bdpr); bgfx.height = Math.floor(bh*bdpr);
+    bctx.setTransform(bdpr,0,0,bdpr,0,0);
+  }
+  function drawBg(){
+    bctx.fillStyle='rgba(5,10,16,0.18)';
+    bctx.fillRect(0,0,bw,bh);
+    const gx=(Math.sin(bt*0.002)*0.5+0.5)*bw;
+    const gy=(Math.cos(bt*0.0016)*0.5+0.5)*bh;
+    const g=bctx.createRadialGradient(gx,gy,10,gx,gy,Math.max(bw,bh)*0.9);
+    g.addColorStop(0,'rgba(0,240,255,0.10)');
+    g.addColorStop(1,'rgba(0,0,0,0)');
+    bctx.fillStyle=g; bctx.fillRect(0,0,bw,bh);
+    bctx.strokeStyle='rgba(0,240,255,0.08)'; bctx.lineWidth=1;
+    for(let i=0;i<7;i++){
+      const y=(bt*0.45+i*110)%(bh+220)-110;
+      bctx.beginPath(); bctx.moveTo(-60,y); bctx.lineTo(bw+60,y+70); bctx.stroke();
+    }
+    bt++;
+    requestAnimationFrame(drawBg);
+  }
+
+  window.addEventListener('resize', resizeBg);
+  resizeBg();
+  drawBg();
+
+  function setV(s){
+    vstate.textContent=s;
+    kV.textContent=s;
+  }
+
+  async function tryPlayVideo(){
+    try{
+      video.muted=true; video.volume=0;
+      video.setAttribute('playsinline','');
+      video.setAttribute('webkit-playsinline','');
+      video.preload='auto';
+      video.load();
+      await video.play();
+      setV('playing');
+    }catch(e){
+      setV('fallback');
+    }
+  }
+
+  // ===== Loader sequence =====
+  function startLoader(){
+    loader.style.display='flex';
+    let p=0;
+    const t = setInterval(()=>{
+      p += 2;
+      if(p>100) p=100;
+      bar.style.width = p + '%';
+      loadline.textContent = `INITIALIZING… ${p}%`;
+      const core = document.getElementById('core');
+      if(core) core.style.transform = `scale(${0.8 + p/200})`;
+      if(p>=100){
+        clearInterval(t);
+        loadline.textContent = 'READY';
+        enter.classList.add('ready');
+      }
+    }, 30);
+  }
+
+  // ===== Navigation / Tabs =====
+  const nav = document.getElementById('nav');
+  function openTab(name){
+    document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(x=>x.classList.remove('active'));
+    const btn = nav.querySelector(`[data-tab="${name}"]`);
+    const pane = document.getElementById('tab-' + name);
+    if(btn) btn.classList.add('active');
+    if(pane) pane.classList.add('active');
+
+    // Header text
+    const map = {
+      integration: ['INTEGRATION HUB','External connections & utilities.'],
+      vault: ['DATA VAULT','Secure storage placeholders.'],
+      agents: ['AGENT SWARM','Roles and control hooks.'],
+      knowledge: ['KNOWLEDGE CORE','Docs and canonical artifacts.'],
+      simulation: ['SIMULATION DECK','Links to live sim views.']
+    };
+    if(map[name]){ head.textContent = map[name][0]; sub.textContent = map[name][1]; }
+  }
+
+  nav.addEventListener('click', (e)=>{
+    const item = e.target.closest('.nav-item');
+    if(!item) return;
+    openTab(item.dataset.tab);
+  });
+
+  // Cards open links (you can replace data-href with your real URLs)
+  document.addEventListener('click', (e)=>{
+    const card = e.target.closest('.card');
+    if(!card) return;
+    const href = card.getAttribute('data-href');
+    if(href) window.open(href, '_blank', 'noopener');
+  });
+
+  // ===== State machine =====
+  gateBtn.addEventListener('click', async ()=>{
+    gate.style.display='none';
+    startLoader();
+    await tryPlayVideo();
+  });
+
+  enter.addEventListener('click', ()=>{
+    loader.style.display='none';
+    workspace.style.display='block';
+    openTab('integration');
+  });
+
+  // Hard signal if video file missing
+  video.addEventListener('error', ()=>{
+    const code = video.error ? video.error.code : 'unknown';
+    setV('fallback');
+    console.warn('Video error code:', code, 'Check if 1769339405783.mp4 is next to index.html');
+  });
+</script>
+</body>
+</html>
